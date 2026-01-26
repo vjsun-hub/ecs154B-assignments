@@ -49,7 +49,7 @@ C-type:
 | Nand            | 0       | 0       |
 
 ## Starter Code
-You can find the starter code [here](CPU.sv)
+You can find the starter code is provided in [cpu.sv](cpu.sv)
 
 ## Testing
 Below is the test program in assemble.
@@ -67,3 +67,4 @@ sub  r0, r1     # r0 = r0 - r1 = 30 - 17 = 13
 sw   r0, r1     # mem[r1] = r0 = mem[17] = 13
 halt            # end of program
 ```
+The provided testbench [CPU_tb.sv](CPU_tb.sv) runs this program and checks that the final values in registers and memory are correct. You can modify the testbench or write your own to test additional cases.

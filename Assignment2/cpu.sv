@@ -38,9 +38,9 @@ module alu (
     output logic       zero // Indicates if result is zero
 );
     // TODO: Implement ALU operations
-    result = 8'h00;
-
     always_comb begin
+        result = 8'h00;
+
         case (func)
             2'b00: result = ~(a & b); // 00 is NAND
             2'b01: result = a * b; // 01 is MULT
@@ -316,7 +316,8 @@ module cpu (
     // assign imm_ext = // TODO
     // assign off_beq = // TODO
     // assign off_jmp = // TODO
-    assign imm_ext = {{5{IR[2]}}, IR[2:0]}; // B-type imm[2:0], sign-extend from bit[2]
+    //assign imm_ext = {{5{IR[2]}}, IR[2:0]}; // B-type imm[2:0], sign-extend from bit[2]
+    assign imm_ext = {5'b00000, IR[2:0]};   // zero-extend 3-bit immediate (CORRECT for addi)
     assign off_beq = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
     assign off_jmp = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
 

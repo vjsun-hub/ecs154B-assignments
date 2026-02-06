@@ -38,6 +38,19 @@ module alu (
     output logic       zero // Indicates if result is zero
 );
     // TODO: Implement ALU operations
+    result = 8'h00;
+
+    always_comb begin
+        case (func)
+            2'b00: result = ~(a & b); // 00 is NAND
+            2'b01: result = a * b; // 01 is MULT
+            2'b10: result = a - b;  // 10 is SUB
+            2'b11: result = a + b;  // 11 is ADD
+            default: result = 8'h00;
+        endcase
+
+        zero = (result == 8'h00); // set zero flag if result is zero
+    end
     
 endmodule
 
@@ -55,13 +68,191 @@ module control_unit (
     
     // Control Signals
     // TODO: Add more control signals as needed
+    output logic       mem_write, //SW
+    output logic       reg_write, //register file write enable
+    output logic       ir_write, //latch IR <= mem_data_out
+    output logic [1:0] alu_func, // matches ALU func (00 NAND, 01 MULT, 10 SUB, 11 ADD)
+    output logic [1:0] alu_src_a_sel, // 00:rds, 01:r0 (for BEQ), others reserved
+    output logic [1:0] alu_src_b_sel, // 00:rs,  01:imm, 10:mem_data, 11:r1 (for BEQ)
+    output logic       pc_inc, //FETCH, PC = PC+1
+    output logic       pc_add_offset, // PC <= PC+offset (for beq/jmp)
+    output logic       pc_offset_is_jmp, // 1 => use JMP offset, 0 => use BEQ offset
+    output logic       wb_sel_mem, // 1 => wb_data=mem_data_out, 0 => wb_data=alu_result
+    output logic       mem_addr_is_pc // 1 => mem_addr=PC, 0 => mem_addr=register[rs]
+    
 );
     
     typedef enum logic [2:0] {
         // TODO: Define states
+        FETCH  = 3'd0,
+        EXEC   = 3'd1,
+        ADDM   = 3'd2, // second cycle for ADDM (use mem_data_out as ALU input)
+        HALT   = 3'd3
     } state_t;
 
     // TODO: Implement state machine and control signal generation
+    state_t curr_state, next_state;
+
+    always_comb begin
+        next_state = curr_state;
+
+        case (curr_state)
+            FETCH: next_state = EXEC;
+            EXEC: begin
+                case (opcode)
+                    4'b1111: next_state = HALT; // HALT
+                    4'b0010: next_state = ADDM; // ADDM needs extra cycle
+                    default: next_state = FETCH; // Other instructions go back to FETCH
+                endcase
+            end
+
+            ADDM: next_state = FETCH;
+            HALT: next_state = HALT;
+            default: next_state = FETCH;
+
+        endcase
+    end
+
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            curr_state <= FETCH;
+        end else begin
+            curr_state <= next_state;
+        end
+    end
+
+
+    // Control outputs (Moore-style, based on state/opcode)
+    always_comb begin
+        halted           = 1'b0;
+        ir_write         = 1'b0;
+        pc_inc           = 1'b0;
+        pc_add_offset    = 1'b0;
+        pc_offset_is_jmp = 1'b0;
+
+        mem_addr_is_pc   = 1'b0;
+        mem_write        = 1'b0;
+
+        reg_write        = 1'b0;
+        wb_sel_mem       = 1'b0;
+
+        alu_src_a_sel    = 2'b00;
+        alu_src_b_sel    = 2'b00;
+        alu_func         = 2'b11; // default ADD
+
+        case (curr_state)
+
+            // ---------------- FETCH ----------------
+            // IR <= mem[PC], PC <= PC+1
+            FETCH: begin
+                mem_addr_is_pc = 1'b1; // memory address comes from PC
+                ir_write       = 1'b1; // latch IR from mem_data_out
+                pc_inc         = 1'b1; // advance to next sequential instruction
+            end
+
+            // ---------------- EXEC ----------------
+            EXEC: begin
+                case (opcode)
+                    // R-type: rds = f(rds, rs)
+                    4'b0000: begin // NAND
+                        alu_func      = 2'b00;
+                        alu_src_a_sel = 2'b00; // rds
+                        alu_src_b_sel = 2'b00; // rs
+                        reg_write     = 1'b1;
+                    end
+                    4'b0001: begin // ADD
+                        alu_func      = 2'b11;
+                        alu_src_a_sel = 2'b00;
+                        alu_src_b_sel = 2'b00;
+                        reg_write     = 1'b1;
+                    end
+                    4'b0100: begin // SUB
+                        alu_func      = 2'b10;
+                        alu_src_a_sel = 2'b00;
+                        alu_src_b_sel = 2'b00;
+                        reg_write     = 1'b1;
+                    end
+                    4'b0101: begin // MULT
+                        alu_func      = 2'b01;
+                        alu_src_a_sel = 2'b00;
+                        alu_src_b_sel = 2'b00;
+                        reg_write     = 1'b1;
+                    end
+
+                    // ADDI (B-type): rds = rds + imm (sign-extended 3-bit)
+                    4'b0011: begin
+                        alu_func      = 2'b11; // ADD
+                        alu_src_a_sel = 2'b00; // rds
+                        alu_src_b_sel = 2'b01; // imm_ext
+                        reg_write     = 1'b1;
+                    end
+
+                    // LW (A-type): rds = mem[rs]
+                    4'b0110: begin
+                        mem_addr_is_pc = 1'b0; // address memory with rs
+                        reg_write      = 1'b1;
+                        wb_sel_mem     = 1'b1; // write back memory data
+                    end
+
+                    // SW (A-type): mem[rs] = rds
+                    4'b0111: begin
+                        mem_addr_is_pc = 1'b0; // address memory with rs
+                        mem_write      = 1'b1;
+                    end
+
+                    // BEQ (C-type): if (r0 == r1) PC = PC + offset
+                    // Note: syntax in your screenshot uses only an offset operand,
+                    // so the compare is implicitly r0 vs r1.
+                    4'b1000: begin
+                        alu_func      = 2'b10; // SUB
+                        alu_src_a_sel = 2'b01; // r0
+                        alu_src_b_sel = 2'b11; // r1
+                        if (alu_zero) begin
+                            pc_add_offset    = 1'b1;
+                            pc_offset_is_jmp = 1'b0; // use BEQ offset
+                        end
+                    end
+
+                    // JMP (C-type): PC = PC + offset
+                    4'b1001: begin
+                        pc_add_offset    = 1'b1;
+                        pc_offset_is_jmp = 1'b1; // use JMP offset
+                    end
+
+                    // ADDM (A-type): rds = rds + mem[rs]
+                    // Cycle 1: present rs on mem_addr; Cycle 2: add mem_data_out.
+                    4'b0010: begin
+                        mem_addr_is_pc = 1'b0; // address memory with rs
+                    end
+
+                    // HALT
+                    4'b1111: begin
+                        halted = 1'b1;
+                    end
+
+                    default: begin end
+                endcase
+            end
+
+            // ---------------- ADDM cycle 2 ----------------
+            ADDM: begin
+                // mem_data_out already reflects mem[rs] (async read)
+                alu_func      = 2'b11; // ADD
+                alu_src_a_sel = 2'b00; // rds
+                alu_src_b_sel = 2'b10; // mem_data_out
+                reg_write     = 1'b1;
+                wb_sel_mem    = 1'b0;  // write back ALU result
+            end
+
+            // ---------------- HALT ----------------
+            HALT: begin
+                halted = 1'b1;
+            end
+
+            default: begin end
+        endcase
+    end
 
 endmodule
 
@@ -82,6 +273,38 @@ module cpu (
     logic [7:0] IR;
 
     // TODO: Define other necessary signals
+    logic [3:0] opcode;
+    logic       ds_idx, s_idx;          // only 2 regs exist => 1-bit indices
+
+    // Immediates / offsets (sign-extended to 8 bits)
+    logic [7:0] imm_ext;
+    logic [7:0] off_beq;
+    logic [7:0] off_jmp;
+
+    // Memory interface
+    logic [7:0] mem_addr;
+    logic       mem_write;
+    logic [7:0] mem_data_out;
+
+    // Register file reads
+    logic [7:0] reg_r1; // rds
+    logic [7:0] reg_r2; // rs
+
+    // Writeback
+    logic       reg_write;
+    logic       wb_sel_mem;
+    logic [7:0] wb_data;
+
+    // ALU
+    logic [7:0] alu_in_a, alu_in_b;
+    logic [1:0] alu_src_a_sel, alu_src_b_sel;
+    logic [1:0] alu_func;
+    logic [7:0] alu_result;
+    logic       alu_zero;
+
+    // Control from CU
+    logic       ir_write, pc_inc, pc_add_offset, pc_offset_is_jmp, mem_addr_is_pc;
+    logic       halted;
 
     // ------------------------------------------------------------------------
     // 1. Instruction Decoding
@@ -90,14 +313,24 @@ module cpu (
     assign ds_idx = IR[3];
     assign s_idx  = IR[2];
 
-    assign imm_ext = // TODO
-    assign off_beq = // TODO
-    assign off_jmp = // TODO
+    // assign imm_ext = // TODO
+    // assign off_beq = // TODO
+    // assign off_jmp = // TODO
+    assign imm_ext = {{5{IR[2]}}, IR[2:0]}; // B-type imm[2:0], sign-extend from bit[2]
+    assign off_beq = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
+    assign off_jmp = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
+
 
     // ------------------------------------------------------------------------
     // 2. Memory Module Instantiation & Address Multiplexing
     // ------------------------------------------------------------------------
     // TODO: Define memory address logic
+    always_comb begin
+        if (mem_addr_is_pc)
+            mem_addr = PC;
+        else
+            mem_addr = reg_r2;
+    end
 
 
     // Memory module instantiation
@@ -129,6 +362,26 @@ module cpu (
     // ------------------------------------------------------------------------
     
     // TODO: Define ALU input multiplexing logic
+    
+    // ALU input A
+    always_comb begin
+        case (alu_src_a_sel)
+            2'b00: alu_in_a = reg_r1; // 00 -> rds (reg_r1)
+            2'b01: alu_in_a = registers[0]; // 01 -> r0  (for beq compare)
+            default: alu_in_a = reg_r1;
+        endcase
+    end
+
+    // ALU input B
+    always_comb begin
+        case (alu_src_b_sel)
+            2'b00: alu_in_b = reg_r2; // 00 -> rs (reg_r2)
+            2'b01: alu_in_b = imm_ext; // 01 -> imm_ext (ADDI)
+            2'b10: alu_in_b = mem_data_out; // 10 -> mem_data_out (ADDM cycle 2)
+            2'b11: alu_in_b = registers[1]; // 11 -> r1 (for beq compare)
+            default: alu_in_b = reg_r2;
+        endcase
+    end
 
     alu cpu_alu (
         .a(alu_in_a),
@@ -148,8 +401,52 @@ module cpu (
         .alu_zero(alu_zero),
         .halted(halted),
         // TODO: Connect other control signals
+        .mem_write(mem_write),
+        .reg_write(reg_write),
+        .ir_write(ir_write),
+        .alu_func(alu_func),
+        .alu_src_a_sel(alu_src_a_sel),
+        .alu_src_b_sel(alu_src_b_sel),
+        .pc_inc(pc_inc),
+        .pc_add_offset(pc_add_offset),
+        .pc_offset_is_jmp(pc_offset_is_jmp),
+        .wb_sel_mem(wb_sel_mem),
+        .mem_addr_is_pc(mem_addr_is_pc)
     );
 
     // TODO
+    
+    // Writeback mux:
+    // - For LW, CU selects memory data
+    // - Otherwise, write ALU result
+    always_comb begin
+        if (wb_sel_mem)
+            wb_data = mem_data_out;
+        else
+            wb_data = alu_result;
+    end
+
+    // PC / IR update:
+    // - FETCH asserts ir_write and pc_inc
+    // - BEQ/JMP may assert pc_add_offset (relative to already-incremented PC)
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            PC <= 8'h00;
+            IR <= 8'h00;
+        end else if (!halted) begin
+            if (ir_write) IR <= mem_data_out;
+
+            // FETCH increments PC
+            if (pc_inc) PC <= PC + 8'd1;
+
+            // BEQ/JMP applies a signed offset relative to current PC
+            if (pc_add_offset) begin
+                if (pc_offset_is_jmp)
+                    PC <= PC + off_jmp;
+                else
+                    PC <= PC + off_beq;
+            end
+        end
+    end
 
 endmodule

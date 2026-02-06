@@ -1,5 +1,5 @@
 $date
-	Thu Feb  5 22:47:28 2026
+	Fri Feb  6 00:23:38 2026
 $end
 $version
 	Icarus Verilog
@@ -634,6 +634,8 @@ b1010 C
 13
 b101 =
 b101 A
+b11110000 /
+b11110000 L
 b101 >
 b101 J
 b1111 +

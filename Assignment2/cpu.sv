@@ -39,17 +39,17 @@ module alu (
 );
     // TODO: Implement ALU operations
     always_comb begin
-        result = 8'h00;
+        result = 8'b0000_0000;
 
         case (func)
             2'b00: result = ~(a & b); // 00 is NAND
             2'b01: result = a * b; // 01 is MULT
             2'b10: result = a - b;  // 10 is SUB
             2'b11: result = a + b;  // 11 is ADD
-            default: result = 8'h00;
+            default: result = 8'b0000_0000;
         endcase
 
-        zero = (result == 8'h00); // set zero flag if result is zero
+        zero = (result == 8'b0000_0000); // set zero flag if result is zero
     end
     
 endmodule
@@ -316,7 +316,6 @@ module cpu (
     // assign imm_ext = // TODO
     // assign off_beq = // TODO
     // assign off_jmp = // TODO
-    //assign imm_ext = {{5{IR[2]}}, IR[2:0]}; // B-type imm[2:0], sign-extend from bit[2]
     assign imm_ext = {5'b00000, IR[2:0]};   // zero-extend 3-bit immediate (CORRECT for addi)
     assign off_beq = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
     assign off_jmp = {{4{IR[3]}}, IR[3:0]}; // C-type offset[3:0], sign-extend from bit[3]
@@ -327,6 +326,8 @@ module cpu (
     // ------------------------------------------------------------------------
     // TODO: Define memory address logic
     always_comb begin
+        mem_addr = 8'b0000_0000;
+
         if (mem_addr_is_pc)
             mem_addr = PC;
         else
@@ -432,8 +433,8 @@ module cpu (
     // - BEQ/JMP may assert pc_add_offset (relative to already-incremented PC)
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
-            PC <= 8'h00;
-            IR <= 8'h00;
+            PC <= 8'b0000_0000;
+            IR <= 8'b0000_0000;
         end else if (!halted) begin
             if (ir_write) IR <= mem_data_out;
 

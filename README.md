@@ -9,4 +9,4 @@ Assignment 1 and 2 are using Hardware Design Language SystemVerilog, assignment 
 - Assignment 4: End of Week 10
 
 ## Pull Requests
-You are welcome to do pull requests if you see any bugs or have any improvemnts to suggest.
+You are welcome to do pull requests if you see any bugs or have any improvements to suggest.

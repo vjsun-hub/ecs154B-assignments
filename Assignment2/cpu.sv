@@ -195,6 +195,12 @@ module control_unit (
                         pc_offset_is_jmp = 1; 
                     end
 
+                    // ADDM: rds = rds + mem[rs]
+                    // cycle 1: put rs on mem_addr bus so mem_data_out = mem[rs]
+                    4'b0010: begin
+                        mem_addr_is_pc = 0;  // Use rs as memory address
+                    end
+
                     // HALT
                     4'b1111: begin
                         halted = 1;
@@ -243,7 +249,6 @@ module cpu (
 
     logic [7:0] imm_ext;
     logic signed [7:0] off_ext;
-    assign imm_ext = {5'b0, IR[2:0]};
     assign off_ext = {{4{IR[3]}}, IR[3:0]};
 
     logic [7:0] off_beq;
@@ -254,8 +259,6 @@ module cpu (
     logic [7:0] mem_data_out;
     logic [7:0] reg_r1; // rds
     logic [7:0] reg_r2; // rs
-    assign reg_r1 = registers[ds_idx];
-    assign reg_r2 = registers[s_idx];
 
     logic       reg_write;
     logic       wb_sel_mem;
@@ -283,16 +286,6 @@ module cpu (
     // ------------------------------------------------------------------------
     // 2. Memory Module Instantiation & Address Multiplexing
     // ------------------------------------------------------------------------
-    // TODO: Define memory address logic
-    always_comb begin
-        mem_addr = 8'b0000_0000;
-
-        if (mem_addr_is_pc)
-            mem_addr = PC; //FETCH
-        else
-            mem_addr = reg_r2;
-    end
-
 
     // Memory module instantiation
     memory_module mem_inst (
@@ -370,15 +363,21 @@ module cpu (
 
     // TODO
 
+    always_comb begin
+        if (wb_sel_mem) begin
+            wb_data = mem_data_out;
+        end else begin
+            wb_data = alu_result;
+        end
+    end
+
     // PC/IR update logic
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
             PC<=0; IR<=0; registers[0]<=0; registers[1]<=0;
         end else if (!halted) begin
             if (ir_write) IR <= mem_data_out;
-            if (reg_write)
-                registers[ds_idx] <= wb_sel_mem ? mem_data_out : alu_result;
-
+    
             if (pc_add_offset)
                 PC <= PC + off_ext;
             else if (pc_inc)

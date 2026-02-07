@@ -19,7 +19,7 @@ Read [This tutorial](https://www.asic-world.com/verilog/verilog_one_day.html) to
 # N to 1 Multiplexer
 Finish the [muxNto1.sv](muxNto1.sv) file to implement an N to 1 multiplexer. The parameter N is defined as a parameter in the module. The width of each input and output is defined by the parameter WIDTH. The select signal will not select an input outside the range of N inputs.
 
-# test
+# Test
 Compile the testbench:
 ```bash
 iverilog -g2012 -o muxNto1_tb.vvp muxNto1.sv muxNto1_tb.sv

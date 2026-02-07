@@ -3,7 +3,7 @@ In 154A you made a CPU in Logisim. Here, you will make a CPU in SystemVerilog.
 
 ## Here's the 8 bit multi-cycle CPU you are making:
 (People who took 154A last quarter may find this familiar, but it's very different!)
-**Important:** The testbench merely test the correctness of your CPU. Thus, your design is not limited to the same number of states/cycles. i.e. you may found yourself using less states, or using muxes and hide away the bus.
+**Important:** The testbench merely tests the correctness of your CPU. Thus, your design is not limited to the same number of states/cycles. i.e. you may found yourself using less states, or using muxes and hiding away the bus.
 
 ![CPU](CPU.png)
 
@@ -21,8 +21,8 @@ This is the CPU from the [Generic CPU](https://canvas.ucdavis.edu/courses/103577
 | mult               | 0101   | rds=rds*rs |
 | lw                 | 0110   | rds=mem[rs] |
 | sw                 | 0111   | mem[rs]=rds |
-| beq                | 1000   | if (rds==rs) PC=PC+offset (offset is sign extended) |
-| jmp                | 1001   | PC=PC+offset (offset is sign extended) |
+| beq                | 1000   | if (rds==rs) PC=PC+offset+1 (offset is sign extended) |
+| jmp                | 1001   | PC=PC+offset+1 (offset is sign extended) |
 | halt               | 1111   | stop execution |
 
 ### The machine has 3 different instruction formats:  A, B, and C.

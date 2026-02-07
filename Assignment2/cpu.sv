@@ -417,15 +417,28 @@ module cpu (
             // inst currently addressed by mem_addr (which is PC in FETCH)
             if (ir_write) IR <= mem_data_out;
 
-            if (pc_inc) PC <= PC + 8'b0000_0001; // FETCH increments PC
+            //if (pc_inc) PC <= PC + 8'b0000_0001; // FETCH increments PC
 
             // BEQ/JMP applies a signed offset relative to current PC
-            if (pc_add_offset) begin
+            /*if (pc_add_offset) begin
                 if (pc_offset_is_jmp)
                     PC <= PC + off_jmp;
                 else
                     PC <= PC + off_beq;
             end
+            */
+             // Update PC exactly once per cycle
+            if (pc_add_offset) begin
+                if (pc_offset_is_jmp)
+                    PC <= PC + off_jmp;
+                else
+                    PC <= PC + off_beq;
+            end else if (pc_inc) begin
+                PC <= PC + 8'b0000_0001;
+            end
+            // else: PC holds value
+
+
         end
     end
 
